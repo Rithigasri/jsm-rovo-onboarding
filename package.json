@@ -1,0 +1,12 @@
+{
+  "name": "action-rovo",
+  "version": "1.2.6",
+  "description": "a sample app that defines a rovo agent and actions",
+  "main": "index.js",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@forge/api": "^5.1.1",
+    "node-fetch": "^3.3.2"
+  }
+}

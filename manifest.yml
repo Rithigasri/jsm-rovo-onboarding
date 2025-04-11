@@ -1,0 +1,105 @@
+modules:
+  rovo:agent:
+    - key: emp-hello-world-agent
+      name: emp
+      description: An agent for testing user logging and employee adding.
+      prompt: >
+        You are a helpful agent. You can log usernames or add employees.
+        - If a user asks to "log a username", extract the name and call `hello-world-logger`.
+        - If a user asks to "add an employee", extract the `userId` and `username`, and call `add-employee`.
+        - If a user asks to "assign an asset", extract the `objectKey` and `employeeId`, and call `assign-asset`.
+        - Sync asset attributes to Confluence by calling `sync-attributes-to-confluence`. No input is required.
+        If required information is missing, ask the user to provide it.
+      conversationStarters:
+        - Log a username to Forge logs
+        - Add a new employee
+        - Assign an asset to an employee
+        - Sync asset attributes to Confluence
+
+      actions:
+        - hello-world-logger
+        - add-employee
+        - assign-asset
+        - sync-attributes-to-confluence
+
+  action:
+    - key: hello-world-logger
+      name: Log a message
+      function: messageLogger
+      actionVerb: GET
+      description: >
+        Logs a username to Forge logs.
+      inputs:
+        message:
+          title: Message
+          type: string
+          required: true
+          description: |
+            "The message that the user has requested be logged to Forge logs"
+    - key: add-employee
+      name: Add Employee
+      function: messageLogger
+      actionVerb: GET
+      description: >
+        Logs an employee to Forge logs in format: userId,username
+      inputs:
+        userId:
+          title: User ID
+          type: string
+          required: true
+          description: ID of the employee
+        username:
+          title: Username
+          type: string
+          required: true
+          description: Name of the employee
+    - key: assign-asset
+      name: Assign Asset
+      function: assignAsset
+      actionVerb: GET
+      description: >
+        Logs the asset assignment in format: objectKey,employeeId
+      inputs:
+        objectKey:
+          title: Object Key
+          type: string
+          required: true
+          description: Key of the asset to be assigned
+        employeeId:
+          title: Employee ID
+          type: string
+          required: true
+          description: ID of the employee to whom the asset is assigned
+    - key: sync-attributes-to-confluence
+      name: Sync Attributes to Confluence
+      function: syncToConfluence
+      actionVerb: GET
+      description: >
+        Fetches assets from Insight and syncs their attributes to a Confluence page.
+
+  function:
+    - key: messageLogger
+      handler: index.messageLogger
+    - key: syncToConfluence
+      handler: index.syncToConfluence
+    - key: assignAsset
+      handler: index.assignAsset
+
+permissions:
+  scopes:
+    - 'read:confluence-content.summary'
+    - 'write:confluence-content'
+    - 'read:confluence-content.all'
+    - 'read:confluence-space.summary'
+    - 'write:page:confluence'
+    - 'read:jira-work'
+  external:
+    fetch:
+      backend:
+        - 'https://api.atlassian.com'
+        - 'https://one-atlas-onki.atlassian.net'
+
+app:
+  runtime:
+    name: nodejs22.x
+  id: ari:cloud:ecosystem::app/1db9aa00-d62d-4055-b94c-9cc33a39a25c
