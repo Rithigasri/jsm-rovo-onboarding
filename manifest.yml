@@ -9,18 +9,21 @@ modules:
         - If a user asks to "assign an asset", extract the `objectKey` and `employeeId`, and call `assign-asset`.
         - Sync asset attributes to Confluence by calling `sync-attributes-to-confluence`. No input is required.
         - If a user asks to "update employee data", call `update-data`.
+        - If a user asks a question about assets or employees, call `query-knowledge-base`.
         If required information is missing, ask the user to provide it.
       conversationStarters:
         - Add a new employee
         - Assign an asset to an employee
         - Sync asset attributes to Confluence
         - Update employee data
+        - Ask a question about assets or employees
 
       actions:
         - add-employee
         - assign-asset
         - sync-attributes-to-confluence
         - update-data
+        - query-knowledge-base
 
   action:
     - key: add-employee
@@ -70,6 +73,18 @@ modules:
       actionVerb: GET
       description: >
         Fetches employee data from the REST API and saves it locally in a JSON file.
+    - key: query-knowledge-base
+      name: Query Knowledge Base
+      function: queryKnowledgeBase
+      actionVerb: GET
+      description: >
+        Queries the Confluence knowledge base for information related to assets or employees.
+      inputs:
+        query:
+          title: Query
+          type: string
+          required: true
+          description: The question or query to search in the knowledge base.
 
   function:
     - key: addEmployee
@@ -80,6 +95,8 @@ modules:
       handler: index.assignAsset
     - key: updateData
       handler: index.updateData
+    - key: queryKnowledgeBase
+      handler: index.queryKnowledgeBase
 
 permissions:
   scopes:
@@ -90,6 +107,7 @@ permissions:
     - 'read:confluence-space.summary'
     - 'write:page:confluence'
     - 'read:jira-work'
+    - 'read:page:confluence'
   external:
     fetch:
       backend:

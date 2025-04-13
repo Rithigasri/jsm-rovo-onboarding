@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 
 const EMAIL = "rithigasri.b@cprime.com";
-const API_TOKEN = "*****";
+const API_TOKEN = "******";
 const WORKSPACE_ID = "9639f74b-a7d7-4189-9acb-9a493cbfe46f";
  // ✅ Replace with your actual spaceId (not key)
 
@@ -503,5 +503,87 @@ export async function updateData() {
     await writeEmployeeData(employeeData);
   } catch (error) {
     console.error("Error while fetching or saving employee data:", error);
+  }
+}
+
+// Function to fetch content from the Confluence page
+async function fetchKnowledgeBaseContent() {
+  const confluencePageId = "27394050"; // ID of the Confluence page
+  const url = `${CONFLUENCE_BASE_URL}/content/${confluencePageId}?expand=body.storage`;
+
+  try {
+    console.log("Fetching content from the Confluence knowledge base...");
+    const response = await fetch(url, {
+      method: "GET",
+      headers: getHeaders(),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const content = data.body.storage.value; // HTML content of the page
+      console.log("✅ Successfully fetched knowledge base content.");
+      return content;
+    } else {
+      console.error("❌ Failed to fetch knowledge base content:", response.status, await response.text());
+      return null;
+    }
+  } catch (error) {
+    console.error("❌ Error while fetching knowledge base content:", error);
+    return null;
+  }
+}
+
+// Function to query the knowledge base
+export async function queryKnowledgeBase(payload) {
+  // Log the payload for debugging
+  console.log("Received payload for queryKnowledgeBase:", JSON.stringify(payload, null, 2));
+
+  // Extract the query from the payload
+  const query = payload?.query;
+
+  // Validate the query parameter
+  if (typeof query !== "string" || query.trim() === "") {
+    console.error("❌ Invalid query parameter. Query must be a non-empty string.");
+    return {
+      status: "error",
+      message: "Invalid query. Please provide a valid question or search term.",
+    };
+  }
+
+  const content = await fetchKnowledgeBaseContent();
+
+  if (!content) {
+    return {
+      status: "error",
+      message: "Knowledge base content is empty or could not be fetched.",
+    };
+  }
+
+  // Parse the content and search for the query
+  console.log("Searching the knowledge base for the query...");
+  const lowerCaseQuery = query.toLowerCase();
+  const matches = [];
+
+  // Example: Extracting relevant sections from the HTML content
+  const regex = /<p>(.*?)<\/p>/g; // Adjust this regex based on the structure of your Confluence page
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    if (match[1].toLowerCase().includes(lowerCaseQuery)) {
+      matches.push(match[1]);
+    }
+  }
+
+  if (matches.length > 0) {
+    console.log("✅ Found matches in the knowledge base:", matches);
+    return {
+      status: "success",
+      results: matches,
+    };
+  } else {
+    console.log("❌ No matches found in the knowledge base.");
+    return {
+      status: "error",
+      message: "No relevant information found in the knowledge base.",
+    };
   }
 }
