@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 
 const EMAIL = "rithigasri.b@cprime.com";
-const API_TOKEN = "*********";
+const API_TOKEN = "*****";
 const WORKSPACE_ID = "9639f74b-a7d7-4189-9acb-9a493cbfe46f";
  // ✅ Replace with your actual spaceId (not key)
 
@@ -313,12 +313,29 @@ export async function assignAsset(payload) {
 
     console.log(`Processing asset assignment: Object Key - ${objectKey}, Employee ID - ${employeeId}`);
 
+    // Function to check if the employee exists in emp_data.json
+    const checkEmployeeExists = async (employeeId) => {
+      try {
+        const data = await fs.readFile(EMP_DATA_FILE, "utf-8");
+        const employees = JSON.parse(data);
+
+        // Check if the employeeId exists in the emp_data.json
+        const employeeExists = employees.some((emp) => emp.emp_id === employeeId);
+        console.log(`Employee existence check for ID ${employeeId}: ${employeeExists}`);
+        return employeeExists;
+      } catch (error) {
+        console.error("❌ Error reading emp_data.json:", error);
+        return false;
+      }
+    };
+
     // Function to fetch the current value of the "Assigned_to" attribute
     const fetchAssignedToAttribute = async (objectKey) => {
-      const url = `${BASE_URL}/object/${objectKey}/attributes`;
+      const objectId = objectKey.split("-")[1];
+      const url = `${BASE_URL}/object/${objectId}/attributes`;
 
       try {
-        console.log(`Fetching attributes for object ${objectKey}...`);
+        console.log(`Fetching attributes for object ${objectKey} (ID: ${objectId})...`);
         const response = await fetch(url, {
           method: "GET",
           headers: getHeaders(),
@@ -328,16 +345,19 @@ export async function assignAsset(payload) {
           const attributes = await response.json();
 
           // Locate the "Assigned_to" attribute by its attribute id (1567)
-          const assignedToAttribute = attributes.find(attr => attr.objectTypeAttributeId === 1567);
+          const assignedToAttribute = attributes.find(
+            (attr) => attr.objectTypeAttributeId === "1567"
+          );
 
-          // Set value to null if no values exist; otherwise, read the value.
-          let value = null;
+          // Check if the attribute exists and has a value
           if (assignedToAttribute && assignedToAttribute.objectAttributeValues.length > 0) {
-            value = assignedToAttribute.objectAttributeValues[0].value;
+            const value = assignedToAttribute.objectAttributeValues[0].value;
+            console.log(`Fetched "Assigned_to" attribute value: ${value}`);
+            return value;
           }
 
-          console.log(`Fetched "Assigned_to" attribute value: ${value === null ? "null" : value}`);
-          return value;
+          console.log(`"Assigned_to" attribute is empty or not set.`);
+          return null; // Return null if the attribute is empty or not set
         } else {
           console.error("❌ Failed to fetch attributes:", response.status, await response.text());
           return null;
@@ -350,7 +370,8 @@ export async function assignAsset(payload) {
 
     // Function to update the "Assigned_to" attribute with the given employeeId
     const updateAssignedTo = async (objectKey, employeeId) => {
-      const url = `${BASE_URL}/object/${objectKey}`;
+      const objectId = objectKey.split("-")[1];
+      const url = `${BASE_URL}/object/${objectId}`;
       const payloadData = {
         attributes: [
           {
@@ -362,9 +383,6 @@ export async function assignAsset(payload) {
             ],
           },
         ],
-        objectTypeId: 167, // Object Type ID
-        avatarUUID: "",
-        hasAvatar: false,
       };
 
       try {
@@ -378,29 +396,60 @@ export async function assignAsset(payload) {
         if (response.ok) {
           const result = await response.json();
           console.log("✅ Update successful:", result);
+          return {
+            status: "success",
+            message: `Asset successfully assigned to Employee ID: ${employeeId}`,
+          };
         } else {
           console.error("❌ Update failed:", response.status, await response.text());
+          return {
+            status: "error",
+            message: "Failed to assign asset.",
+          };
         }
       } catch (error) {
         console.error("❌ Error during update:", error);
+        return {
+          status: "error",
+          message: "An error occurred while assigning the asset.",
+        };
       }
     };
+
+    // Check if the employee exists in emp_data.json
+    const employeeExists = await checkEmployeeExists(employeeId);
+    if (!employeeExists) {
+      console.log(`❌ Employee with ID ${employeeId} does not exist.`);
+      return {
+        status: "error",
+        message: `Employee with ID ${employeeId} does not exist. Please add the employee to the database before assigning the asset.`,
+      };
+    }
 
     // Fetch the current "Assigned_to" attribute value
     const currentValue = await fetchAssignedToAttribute(objectKey);
 
     // Debug logging of the fetched value.
-    console.log(`Debug: Fetched "Assigned_to" attribute value: ${currentValue === null ? "null" : currentValue}`);
+    console.log(`Debug: Fetched "Assigned_to" attribute value: ${currentValue}`);
 
     // Check if the attribute is either null (the actual null value) or the string "null"
     if (currentValue === null || currentValue === "null") {
       console.log(`"Assigned_to" is ${currentValue}. Proceeding with update...`);
-      await updateAssignedTo(objectKey, employeeId);
+      const result = await updateAssignedTo(objectKey, employeeId);
+      return result;
     } else {
-      console.log(`Employee already assigned with value: ${currentValue}. No update performed.`);
+      console.log(`❌ Asset is already assigned to: ${currentValue}. No update performed.`);
+      return {
+        status: "error",
+        message: `Asset is already assigned to: ${currentValue}.`,
+      };
     }
   } else {
     console.error("❌ Missing required fields in payload. Ensure both objectKey and employeeId are provided.");
+    return {
+      status: "error",
+      message: "Missing required fields. Ensure both objectKey and employeeId are provided.",
+    };
   }
 }
 

@@ -172,6 +172,17 @@
         "attributes": {}
       },
       {
+        "id": "1971",
+        "name": "Sesha",
+        "attributes": {
+          "Name": "Sesha",
+          "Created": "2025-04-13T16:18:05.137Z",
+          "Updated": "2025-04-13T16:18:05.137Z",
+          "Employee_id": "212233",
+          "Key": "EM-1971"
+        }
+      },
+      {
         "id": "1963",
         "name": "Shafeeq",
         "attributes": {
@@ -209,13 +220,12 @@
         "attributes": {
           "Key": "EM-1949",
           "Created": "2025-04-10T05:46:20.378Z",
-          "Updated": "2025-04-10T05:46:20.379Z",
+          "Updated": "2025-04-13T16:17:04.013Z",
           "Asset_id": "KBD-001",
           "Type": "Keyboard",
           "Brand": "Logitech",
           "Model": "K120",
-          "Status": "active",
-          "Assigned_to": "EMP001"
+          "Status": "active"
         }
       },
       {
