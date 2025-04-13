@@ -10,6 +10,7 @@ modules:
         - Sync asset attributes to Confluence by calling `sync-attributes-to-confluence`. No input is required.
         - If a user asks to "update employee data", call `update-data`.
         - If a user asks a question about assets or employees, call `query-knowledge-base`.
+        - If a user asks to "delete an employee", extract the `emp_id`, and call `delete-employee`.
         If required information is missing, ask the user to provide it.
       conversationStarters:
         - Add a new employee
@@ -17,6 +18,7 @@ modules:
         - Sync asset attributes to Confluence
         - Update employee data
         - Ask a question about assets or employees
+        - Delete an employee
 
       actions:
         - add-employee
@@ -24,6 +26,7 @@ modules:
         - sync-attributes-to-confluence
         - update-data
         - query-knowledge-base
+        - delete-employee
 
   action:
     - key: add-employee
@@ -85,6 +88,18 @@ modules:
           type: string
           required: true
           description: The question or query to search in the knowledge base.
+    - key: delete-employee
+      name: Delete Employee
+      function: deleteEmployee
+      actionVerb: GET
+      description: >
+        Deletes an employee from the database and removes their object from the system.
+      inputs:
+        emp_id:
+          title: Employee ID
+          type: string
+          required: true
+          description: The ID of the employee to delete.
 
   function:
     - key: addEmployee
@@ -97,6 +112,8 @@ modules:
       handler: index.updateData
     - key: queryKnowledgeBase
       handler: index.queryKnowledgeBase
+    - key: deleteEmployee
+      handler: index.deleteEmployee
 
 permissions:
   scopes:

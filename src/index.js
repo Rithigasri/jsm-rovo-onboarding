@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 
 const EMAIL = "rithigasri.b@cprime.com";
-const API_TOKEN = "******";
+const API_TOKEN = "*****";
 const WORKSPACE_ID = "9639f74b-a7d7-4189-9acb-9a493cbfe46f";
  // ✅ Replace with your actual spaceId (not key)
 
@@ -584,6 +584,82 @@ export async function queryKnowledgeBase(payload) {
     return {
       status: "error",
       message: "No relevant information found in the knowledge base.",
+    };
+  }
+}
+
+export async function deleteEmployee(payload) {
+  console.log("Received payload for deleteEmployee:", JSON.stringify(payload, null, 2));
+
+  // Extract the emp_id from the payload
+  const empId = payload?.emp_id;
+
+  // Validate the emp_id parameter
+  if (typeof empId !== "string" || empId.trim() === "") {
+    console.error("❌ Invalid emp_id parameter. emp_id must be a non-empty string.");
+    return {
+      status: "error",
+      message: "Invalid emp_id. Please provide a valid employee ID.",
+    };
+  }
+
+  try {
+    // Step 1: Read the emp_data.json file
+    console.log("🔄 Reading emp_data.json...");
+    const data = await fs.readFile(EMP_DATA_FILE, "utf-8");
+    const employees = JSON.parse(data);
+
+    // Step 2: Find the employee with the given emp_id
+    console.log(`🔍 Searching for employee with ID: ${empId}...`);
+    const employee = employees.find((emp) => emp.emp_id === empId);
+
+    if (!employee) {
+      console.error(`❌ Employee with ID ${empId} not found.`);
+      return {
+        status: "error",
+        message: `Employee with ID ${empId} not found.`,
+      };
+    }
+
+    // Step 3: Extract the objectKey and split to get the object ID
+    const objectKey = employee.objectKey;
+    const objectId = objectKey.split("-")[1]; // Extract the numeric ID from the objectKey
+    console.log(`✅ Found employee. ObjectKey: ${objectKey}, ObjectId: ${objectId}`);
+
+    // Step 4: Delete the object using the API
+    const url = `${BASE_URL}/object/${objectId}`;
+    console.log(`🔄 Sending DELETE request to URL: ${url}...`);
+
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: getHeaders(),
+    });
+
+    if (response.ok) {
+      console.log(`✅ Successfully deleted object with ID ${objectId}.`);
+
+      // Step 5: Remove the employee from the emp_data.json file
+      console.log("🔄 Removing employee from emp_data.json...");
+      const updatedEmployees = employees.filter((emp) => emp.emp_id !== empId);
+      await fs.writeFile(EMP_DATA_FILE, JSON.stringify(updatedEmployees, null, 2));
+      console.log("✅ Employee data updated successfully in emp_data.json.");
+
+      return {
+        status: "success",
+        message: `Employee with ID ${empId} and objectKey ${objectKey} successfully deleted.`,
+      };
+    } else {
+      console.error("❌ Failed to delete object:", response.status, await response.text());
+      return {
+        status: "error",
+        message: "Failed to delete the employee object.",
+      };
+    }
+  } catch (error) {
+    console.error("❌ Error while deleting employee:", error);
+    return {
+      status: "error",
+      message: "An error occurred while deleting the employee.",
     };
   }
 }
