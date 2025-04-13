@@ -84,6 +84,7 @@ modules:
 permissions:
   scopes:
     - 'read:confluence-content.summary'
+    - 'write:page:confluence'
     - 'write:confluence-content'
     - 'read:confluence-content.all'
     - 'read:confluence-space.summary'

@@ -1,9 +1,5 @@
 [
   {
-    "objectType": "Data",
-    "objects": []
-  },
-  {
     "objectType": "People",
     "objects": [
       {
@@ -187,25 +183,14 @@
         }
       },
       {
-        "id": "1967",
-        "name": "Sudha",
+        "id": "1970",
+        "name": "shavss",
         "attributes": {
-          "Name": "Sudha",
-          "Created": "2025-04-13T14:18:34.106Z",
-          "Updated": "2025-04-13T14:18:34.106Z",
-          "Employee_id": "83",
-          "Key": "EM-1967"
-        }
-      },
-      {
-        "id": "1962",
-        "name": "tharun",
-        "attributes": {
-          "Name": "tharun",
-          "Created": "2025-04-10T14:13:18.711Z",
-          "Updated": "2025-04-10T14:13:18.711Z",
-          "Employee_id": "Co878044",
-          "Key": "EM-1962"
+          "Name": "shavss",
+          "Created": "2025-04-13T15:37:06.154Z",
+          "Updated": "2025-04-13T15:37:06.154Z",
+          "Employee_id": "S150403",
+          "Key": "EM-1970"
         }
       },
       {

@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 
 const EMAIL = "rithigasri.b@cprime.com";
-const API_TOKEN = "****";
+const API_TOKEN = "*********";
 const WORKSPACE_ID = "9639f74b-a7d7-4189-9acb-9a493cbfe46f";
  // ✅ Replace with your actual spaceId (not key)
 
@@ -46,15 +46,11 @@ async function writeEmployeeData(data) {
 // Helper function to read employee data from the JSON file
 async function readEmployeeData() {
   try {
-    const data = await fs.readFile(EMP_DATA_FILE, "utf-8");
+    const data = await fs.readFile(EMP_DATA_FILE, "utf8");
     return JSON.parse(data);
   } catch (error) {
-    if (error.code === "ENOENT") {
-      // File doesn't exist, return an empty array
-      return [];
-    }
     console.error("Error reading employee data:", error);
-    throw error;
+    return [];
   }
 }
 
@@ -70,8 +66,11 @@ export async function addEmployee(payload) {
     const existingEmployee = employeeData.find((emp) => emp.emp_id === payload.userId);
 
     if (existingEmployee) {
-      console.log(`Employee already exists: ${existingEmployee.name} (ID: ${existingEmployee.emp_id}).`);
-      return;
+      console.log(`❌ Employee already exists: ${existingEmployee.name} (ID: ${existingEmployee.emp_id}).`);
+      return {
+        status: "error",
+        message: `Employee already exists: ${existingEmployee.name} (ID: ${existingEmployee.emp_id}).`,
+      };
     }
 
     console.log(`Adding new employee: ${payload.userId}, ${payload.username}`);
@@ -90,6 +89,7 @@ export async function addEmployee(payload) {
     };
 
     try {
+      logDebugInfo("Sending request to create object", data);
       const response = await fetch(`${BASE_URL}/object/create`, {
         method: "POST",
         headers: getHeaders(),
@@ -98,7 +98,7 @@ export async function addEmployee(payload) {
 
       if (response.ok) {
         const result = await response.json();
-        console.log("Employee added successfully:", result);
+        console.log("✅ Employee added successfully:", result);
 
         // Add the new employee to emp_data.json
         employeeData.push({
@@ -106,16 +106,33 @@ export async function addEmployee(payload) {
           name: payload.username,
           emp_id: payload.userId,
         });
-        await fs.writeFile(EMP_DATA_FILE, JSON.stringify(employeeData, null, 2));
-        console.log("Employee data updated in emp_data.json.");
+        await writeEmployeeData(employeeData);
+        console.log("✅ Employee data updated in emp_data.json.");
+
+        return {
+          status: "success",
+          message: "Employee added successfully.",
+        };
       } else {
-        console.error("Failed to add employee:", response.status, await response.text());
+        console.error("❌ Failed to add employee:", response.status, await response.text());
+        return {
+          status: "error",
+          message: "Failed to add employee.",
+        };
       }
     } catch (error) {
-      console.error("Error while adding employee:", error);
+      console.error("❌ Error while adding employee:", error);
+      return {
+        status: "error",
+        message: "An error occurred while adding the employee.",
+      };
     }
   } else {
-    console.error("Invalid payload. Ensure userId and username are provided.");
+    console.error("❌ Invalid payload. Ensure userId and username are provided.");
+    return {
+      status: "error",
+      message: "Invalid payload. Ensure userId and username are provided.",
+    };
   }
 }
 
@@ -123,6 +140,7 @@ export async function addEmployee(payload) {
 
 export async function syncToConfluence() {
   const objectSchemaId = 14;
+  const confluencePageId = "27394050"; // ID of the existing Confluence page to update
   console.log("🔄 Starting sync to Confluence for object schema:", objectSchemaId);
 
   const getAllObjectTypes = async () => {
@@ -133,7 +151,8 @@ export async function syncToConfluence() {
       return [];
     }
     const types = await response.json();
-    return types.map(type => ({ id: type.id, name: type.name }));
+    console.log("✅ Fetched object types:", types);
+    return types.map((type) => ({ id: type.id, name: type.name }));
   };
 
   const getAttributes = async (objectTypeId) => {
@@ -144,7 +163,8 @@ export async function syncToConfluence() {
       return [];
     }
     const attrs = await response.json();
-    return attrs.map(attr => ({ id: attr.id, name: attr.name }));
+    console.log(`✅ Fetched attributes for object type ${objectTypeId}:`, attrs);
+    return attrs.map((attr) => ({ id: attr.id, name: attr.name }));
   };
 
   const getObjects = async (objectTypeId, objectTypeName, attributeMap) => {
@@ -161,11 +181,12 @@ export async function syncToConfluence() {
         return [];
       }
       const data = await response.json();
+      console.log(`✅ Fetched objects for ${objectTypeName}:`, data);
       const objects = data.values || [];
 
-      return objects.map(obj => {
+      return objects.map((obj) => {
         const attributes = {};
-        obj.attributes.forEach(attr => {
+        obj.attributes.forEach((attr) => {
           const name = attributeMap[attr.objectTypeAttributeId];
           if (name && attr.objectAttributeValues?.[0]?.value) {
             attributes[name] = attr.objectAttributeValues[0].value;
@@ -179,55 +200,105 @@ export async function syncToConfluence() {
     }
   };
 
-  const createConfluencePage = async (title, content) => {
-    const url = `${CONFLUENCE_BASE_URL}/content`;
+  const updateConfluencePage = async (pageId, title, content, versionNumber) => {
+    const url = `${CONFLUENCE_BASE_URL}/content/${pageId}`;
     const payload = {
-      type: "page",
-      title:`Assets - ${new Date().toLocaleString()}`,
-      space: { key: CONFLUENCE_SPACE_KEY },
+      id: pageId,
+      type: "page", // Specify the content type as "page"
+      title: title, // Title of the page
       body: {
         storage: {
-          value: `<pre>${content}</pre>`,
-          representation: "storage",
-        },
+          value: `<p>${content}</p>`,
+          representation: "storage"
+        }
+      },
+      version: {
+        number: versionNumber + 1, // Increment the version number
+        message: "Updated with the latest asset data", // Update message
       },
     };
 
     try {
+      console.log("🔄 Updating Confluence page with payload:", payload);
       const response = await fetch(url, {
-        method: "POST",
+        method: "PUT",
         headers: getHeaders(),
         body: JSON.stringify(payload),
       });
+
       if (response.ok) {
         const result = await response.json();
-        console.log("✅ Confluence page created:", result._links.base + result._links.webui);
+        console.log("✅ Confluence page updated successfully:", result._links.base + result._links.webui);
       } else {
-        console.error("❌ Failed to create Confluence page:", response.status, await response.text());
+        console.error("❌ Failed to update Confluence page:", response.status, await response.text());
       }
     } catch (error) {
-      console.error("❌ Error while creating Confluence page:", error);
+      console.error("❌ Error while updating Confluence page:", error);
+    }
+  };
+
+  const getConfluencePageVersion = async (pageId) => {
+    const url = `${CONFLUENCE_BASE_URL}/content/${pageId}?expand=version`;
+    try {
+      const response = await fetch(url, { headers: getHeaders() });
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ Fetched Confluence page version:", data.version.number);
+        return data.version.number;
+      } else {
+        console.error("❌ Failed to fetch Confluence page version:", response.status, await response.text());
+        return null;
+      }
+    } catch (error) {
+      console.error("❌ Error while fetching Confluence page version:", error);
+      return null;
     }
   };
 
   try {
     const objectTypes = await getAllObjectTypes();
-    const allObjects = [];
+    if (objectTypes.length === 0) {
+      console.error("❌ No object types found. Exiting sync process.");
+      return;
+    }
 
+    const allObjects = [];
     for (const objectType of objectTypes) {
       console.log("🔍 Processing object type:", objectType.name);
       const attributes = await getAttributes(objectType.id);
-      const attributeMap = Object.fromEntries(attributes.map(attr => [attr.id, attr.name]));
+      if (attributes.length === 0) {
+        console.warn(`⚠️ No attributes found for object type ${objectType.name}. Skipping.`);
+        continue;
+      }
+
+      const attributeMap = Object.fromEntries(attributes.map((attr) => [attr.id, attr.name]));
       const objects = await getObjects(objectType.id, objectType.name, attributeMap);
+      if (objects.length === 0) {
+        console.warn(`⚠️ No objects found for object type ${objectType.name}. Skipping.`);
+        continue;
+      }
+
+      console.log(`✅ Processed objects for ${objectType.name}:`, objects);
       allObjects.push({ objectType: objectType.name, objects });
     }
 
+    if (allObjects.length === 0) {
+      console.error("❌ No objects processed. Exiting sync process.");
+      return;
+    }
+
     const jsonContent = JSON.stringify(allObjects, null, 2);
+    console.log("📄 Generated JSON content for Confluence page:", jsonContent);
+
+    // Write JSON content to a file for debugging
     await fs.writeFile("response.json", jsonContent);
     console.log("📁 JSON written to file: response.json");
 
-    const title = `Asset Export - ${new Date().toLocaleString()}`;
-    await createConfluencePage(title, jsonContent);
+    const title = "Asset Knowledge Base";
+    const versionNumber = await getConfluencePageVersion(confluencePageId);
+    if (versionNumber !== null) {
+      await updateConfluencePage(confluencePageId, title, jsonContent, versionNumber);
+    }
   } catch (error) {
     console.error("❌ Error in syncToConfluence:", error);
   }
