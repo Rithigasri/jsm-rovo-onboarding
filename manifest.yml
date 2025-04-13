@@ -5,43 +5,31 @@ modules:
       description: An agent for testing user logging and employee adding.
       prompt: >
         You are a helpful agent. You can log usernames or add employees.
-        - If a user asks to "log a username", extract the name and call `hello-world-logger`.
         - If a user asks to "add an employee", extract the `userId` and `username`, and call `add-employee`.
         - If a user asks to "assign an asset", extract the `objectKey` and `employeeId`, and call `assign-asset`.
         - Sync asset attributes to Confluence by calling `sync-attributes-to-confluence`. No input is required.
+        - If a user asks to "update employee data", call `update-data`.
         If required information is missing, ask the user to provide it.
       conversationStarters:
-        - Log a username to Forge logs
         - Add a new employee
         - Assign an asset to an employee
         - Sync asset attributes to Confluence
+        - Update employee data
 
       actions:
-        - hello-world-logger
         - add-employee
         - assign-asset
         - sync-attributes-to-confluence
+        - update-data
 
   action:
-    - key: hello-world-logger
-      name: Log a message
-      function: messageLogger
-      actionVerb: GET
-      description: >
-        Logs a username to Forge logs.
-      inputs:
-        message:
-          title: Message
-          type: string
-          required: true
-          description: |
-            "The message that the user has requested be logged to Forge logs"
     - key: add-employee
       name: Add Employee
-      function: messageLogger
+      function: addEmployee
       actionVerb: GET
       description: >
-        Logs an employee to Forge logs in format: userId,username
+        Logs an employee to Forge logs in format: userId,username.
+        Validates if the employee already exists in emp_data.json before adding.
       inputs:
         userId:
           title: User ID
@@ -76,14 +64,22 @@ modules:
       actionVerb: GET
       description: >
         Fetches assets from Insight and syncs their attributes to a Confluence page.
+    - key: update-data
+      name: Update Employee Data
+      function: updateData
+      actionVerb: GET
+      description: >
+        Fetches employee data from the REST API and saves it locally in a JSON file.
 
   function:
-    - key: messageLogger
-      handler: index.messageLogger
+    - key: addEmployee
+      handler: index.addEmployee
     - key: syncToConfluence
       handler: index.syncToConfluence
     - key: assignAsset
       handler: index.assignAsset
+    - key: updateData
+      handler: index.updateData
 
 permissions:
   scopes:

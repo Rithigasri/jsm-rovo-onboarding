@@ -1,13 +1,19 @@
 import api, { route } from "@forge/api";
 import fs from "fs/promises";
+import path from "path";
+
 const EMAIL = "rithigasri.b@cprime.com";
-const API_TOKEN = "*****";
+const API_TOKEN = "****";
 const WORKSPACE_ID = "9639f74b-a7d7-4189-9acb-9a493cbfe46f";
  // ✅ Replace with your actual spaceId (not key)
 
 const BASE_URL = `https://api.atlassian.com/jsm/assets/workspace/${WORKSPACE_ID}/v1`;
 const CONFLUENCE_BASE_URL = "https://one-atlas-onki.atlassian.net/wiki/rest/api";
 const CONFLUENCE_SPACE_KEY = "JSMROVO";
+
+const EMP_DATA_FILE = path.join(__dirname, "emp_data.json");
+const OBJECT_TYPE_ID = 166; // ObjectType ID for "People"
+const OBJECT_SCHEMA_ID = 14; // ObjectSchema ID
 
 function getHeaders() {
   const authHeader = Buffer.from(`${EMAIL}:${API_TOKEN}`).toString("base64");
@@ -26,11 +32,49 @@ function logDebugInfo(message, data) {
   }
 }
 
-// 1. Asset Logger
-export async function messageLogger(payload) {
+// Helper function to write employee data to the JSON file
+async function writeEmployeeData(data) {
+  try {
+    await fs.writeFile(EMP_DATA_FILE, JSON.stringify(data, null, 2));
+    console.log("Employee data saved successfully to emp_data.json.");
+  } catch (error) {
+    console.error("Error writing employee data:", error);
+    throw error;
+  }
+}
+
+// Helper function to read employee data from the JSON file
+async function readEmployeeData() {
+  try {
+    const data = await fs.readFile(EMP_DATA_FILE, "utf-8");
+    return JSON.parse(data);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      // File doesn't exist, return an empty array
+      return [];
+    }
+    console.error("Error reading employee data:", error);
+    throw error;
+  }
+}
+
+// 1. Add Employee
+export async function addEmployee(payload) {
   console.log("Payload received:", payload);
+
   if (payload.userId && payload.username) {
-    console.log(`Logging employee: ${payload.userId}, ${payload.username}`);
+    // Read existing employee data
+    const employeeData = await readEmployeeData();
+
+    // Check if the employee already exists based on emp_id
+    const existingEmployee = employeeData.find((emp) => emp.emp_id === payload.userId);
+
+    if (existingEmployee) {
+      console.log(`Employee already exists: ${existingEmployee.name} (ID: ${existingEmployee.emp_id}).`);
+      return;
+    }
+
+    console.log(`Adding new employee: ${payload.userId}, ${payload.username}`);
     const data = {
       objectTypeId: "166",
       attributes: [
@@ -44,25 +88,34 @@ export async function messageLogger(payload) {
         },
       ],
     };
+
     try {
-      logDebugInfo("Sending request to create object", data);
       const response = await fetch(`${BASE_URL}/object/create`, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(data),
       });
-      logDebugInfo("Response received", { status: response.status, statusText: response.statusText });
+
       if (response.ok) {
         const result = await response.json();
-        console.log("Object created successfully:", result);
+        console.log("Employee added successfully:", result);
+
+        // Add the new employee to emp_data.json
+        employeeData.push({
+          objectKey: result.objectKey,
+          name: payload.username,
+          emp_id: payload.userId,
+        });
+        await fs.writeFile(EMP_DATA_FILE, JSON.stringify(employeeData, null, 2));
+        console.log("Employee data updated in emp_data.json.");
       } else {
-        console.error("Failed to create object:", response.status, await response.text());
+        console.error("Failed to add employee:", response.status, await response.text());
       }
     } catch (error) {
-      console.error("Error while creating object:", error);
+      console.error("Error while adding employee:", error);
     }
   } else {
-    console.log(`Logging message: ${payload.message}`);
+    console.error("Invalid payload. Ensure userId and username are provided.");
   }
 }
 
@@ -277,5 +330,58 @@ export async function assignAsset(payload) {
     }
   } else {
     console.error("❌ Missing required fields in payload. Ensure both objectKey and employeeId are provided.");
+  }
+}
+
+// Function to fetch employee data from the REST API and save it locally
+export async function updateData() {
+  console.log("Fetching employee data from the REST API...");
+
+  const url = `${BASE_URL}/object/navlist/aql`;
+  const payload = {
+    objectTypeId: OBJECT_TYPE_ID,
+    attributesToDisplay: {
+      attributesToDisplayIds: ["1551", "1552", "1561"], // Key, Name, Employee ID
+    },
+    page: 1,
+    asc: 1,
+    resultsPerPage: 100,
+    includeAttributes: true,
+    objectSchemaId: OBJECT_SCHEMA_ID,
+    qlQuery: `objectType = "People"`, // Query to filter by object type
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      console.error("Failed to fetch employee data:", response.status, await response.text());
+      return;
+    }
+
+    const data = await response.json();
+    const employeeData = data.objectEntries.map((entry) => {
+      const attributes = entry.attributes.reduce((acc, attr) => {
+        if (attr.objectTypeAttributeId === "1551") acc.objectKey = attr.objectAttributeValues[0]?.value;
+        if (attr.objectTypeAttributeId === "1552") acc.name = attr.objectAttributeValues[0]?.value;
+        if (attr.objectTypeAttributeId === "1561") acc.emp_id = attr.objectAttributeValues[0]?.value;
+        return acc;
+      }, {});
+
+      return {
+        objectKey: attributes.objectKey,
+        name: attributes.name,
+        emp_id: attributes.emp_id,
+      };
+    });
+
+    // Save the filtered employee data to a JSON file
+    await writeEmployeeData(employeeData);
+  } catch (error) {
+    console.error("Error while fetching or saving employee data:", error);
   }
 }

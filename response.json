@@ -76,6 +76,17 @@
         "attributes": {}
       },
       {
+        "id": "1966",
+        "name": "Easwar",
+        "attributes": {
+          "Name": "Easwar",
+          "Created": "2025-04-13T14:09:55.326Z",
+          "Updated": "2025-04-13T14:09:55.326Z",
+          "Employee_id": "C045687",
+          "Key": "EM-1966"
+        }
+      },
+      {
         "id": "218",
         "name": "Emma Paris",
         "attributes": {}
@@ -89,6 +100,17 @@
           "Updated": "2025-04-10T05:46:20.377Z",
           "Employee_id": "EMP005",
           "Key": "EM-1948"
+        }
+      },
+      {
+        "id": "1965",
+        "name": "Harish",
+        "attributes": {
+          "Name": "Harish",
+          "Created": "2025-04-13T13:58:34.828Z",
+          "Updated": "2025-04-13T13:58:34.828Z",
+          "Employee_id": "C0878044",
+          "Key": "EM-1965"
         }
       },
       {
@@ -162,6 +184,17 @@
           "Updated": "2025-04-10T18:57:30.242Z",
           "Employee_id": "83",
           "Key": "EM-1963"
+        }
+      },
+      {
+        "id": "1967",
+        "name": "Sudha",
+        "attributes": {
+          "Name": "Sudha",
+          "Created": "2025-04-13T14:18:34.106Z",
+          "Updated": "2025-04-13T14:18:34.106Z",
+          "Employee_id": "83",
+          "Key": "EM-1967"
         }
       },
       {
@@ -265,13 +298,13 @@
         "attributes": {
           "Key": "EM-1953",
           "Created": "2025-04-10T05:46:20.509Z",
-          "Updated": "2025-04-10T05:46:20.509Z",
+          "Updated": "2025-04-11T05:49:29.592Z",
           "Asset_id": "MON-002",
           "Type": "Monitor",
           "Brand": "LG",
           "Model": "24MK600M",
           "Status": "active",
-          "Assigned_to": "null"
+          "Assigned_to": "E077"
         }
       },
       {
