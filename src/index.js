@@ -9,7 +9,7 @@ const WORKSPACE_ID = "9639f74b-a7d7-4189-9acb-9a493cbfe46f";
 
 const BASE_URL = `https://api.atlassian.com/jsm/assets/workspace/${WORKSPACE_ID}/v1`;
 const CONFLUENCE_BASE_URL = "https://one-atlas-onki.atlassian.net/wiki/rest/api";
-const CONFLUENCE_SPACE_KEY = "JSMROVO";
+
 
 const EMP_DATA_FILE = path.join(__dirname, "emp_data.json");
 const OBJECT_TYPE_ID = 166; // ObjectType ID for "People"
@@ -313,24 +313,29 @@ export async function assignAsset(payload) {
 
     console.log(`Processing asset assignment: Object Key - ${objectKey}, Employee ID - ${employeeId}`);
 
-    // Function to check if the employee exists in emp_data.json
-    const checkEmployeeExists = async (employeeId) => {
+    // Function to check if the employee exists in emp_data.json and get their objectKey
+    const getEmployeeObjectKey = async (employeeId) => {
       try {
         const data = await fs.readFile(EMP_DATA_FILE, "utf-8");
         const employees = JSON.parse(data);
 
-        // Check if the employeeId exists in the emp_data.json
-        const employeeExists = employees.some((emp) => emp.emp_id === employeeId);
-        console.log(`Employee existence check for ID ${employeeId}: ${employeeExists}`);
-        return employeeExists;
+        // Find the employee by employeeId
+        const employee = employees.find((emp) => emp.emp_id === employeeId);
+        if (employee) {
+          console.log(`✅ Employee found: ${employee.name} (ID: ${employeeId}, ObjectKey: ${employee.objectKey})`);
+          return employee.objectKey; // Return the objectKey instead of the name
+        } else {
+          console.log(`❌ Employee with ID ${employeeId} not found.`);
+          return null;
+        }
       } catch (error) {
         console.error("❌ Error reading emp_data.json:", error);
-        return false;
+        return null;
       }
     };
 
-    // Function to fetch the current value of the "Assigned_to" attribute
-    const fetchAssignedToAttribute = async (objectKey) => {
+    // Function to fetch the current value of the "Owner" attribute
+    const fetchOwnerAttribute = async (objectKey) => {
       const objectId = objectKey.split("-")[1];
       const url = `${BASE_URL}/object/${objectId}/attributes`;
 
@@ -344,19 +349,19 @@ export async function assignAsset(payload) {
         if (response.ok) {
           const attributes = await response.json();
 
-          // Locate the "Assigned_to" attribute by its attribute id (1567)
-          const assignedToAttribute = attributes.find(
-            (attr) => attr.objectTypeAttributeId === "1567"
+          // Locate the "Owner" attribute by its attribute id (1572)
+          const ownerAttribute = attributes.find(
+            (attr) => attr.objectTypeAttributeId === "1572"
           );
 
           // Check if the attribute exists and has a value
-          if (assignedToAttribute && assignedToAttribute.objectAttributeValues.length > 0) {
-            const value = assignedToAttribute.objectAttributeValues[0].value;
-            console.log(`Fetched "Assigned_to" attribute value: ${value}`);
+          if (ownerAttribute && ownerAttribute.objectAttributeValues.length > 0) {
+            const value = ownerAttribute.objectAttributeValues[0].value;
+            console.log(`Fetched "Owner" attribute value: ${value}`);
             return value;
           }
 
-          console.log(`"Assigned_to" attribute is empty or not set.`);
+          console.log(`"Owner" attribute is empty or not set.`);
           return null; // Return null if the attribute is empty or not set
         } else {
           console.error("❌ Failed to fetch attributes:", response.status, await response.text());
@@ -368,17 +373,17 @@ export async function assignAsset(payload) {
       }
     };
 
-    // Function to update the "Assigned_to" attribute with the given employeeId
-    const updateAssignedTo = async (objectKey, employeeId) => {
+    // Function to update the "Owner" attribute with the employee's objectKey
+    const updateOwner = async (objectKey, employeeObjectKey) => {
       const objectId = objectKey.split("-")[1];
       const url = `${BASE_URL}/object/${objectId}`;
       const payloadData = {
         attributes: [
           {
-            objectTypeAttributeId: "1567", // Attribute ID for "Assigned_to"
+            objectTypeAttributeId: "1572", // Attribute ID for "Owner"
             objectAttributeValues: [
               {
-                value: employeeId, // New employee ID to assign
+                value: employeeObjectKey, // Employee objectKey to assign
               },
             ],
           },
@@ -386,7 +391,7 @@ export async function assignAsset(payload) {
       };
 
       try {
-        console.log(`Updating object ${objectKey} with employee ID ${employeeId}...`);
+        console.log(`Updating object ${objectKey} with owner objectKey ${employeeObjectKey}...`);
         const response = await fetch(url, {
           method: "PUT",
           headers: getHeaders(),
@@ -398,7 +403,7 @@ export async function assignAsset(payload) {
           console.log("✅ Update successful:", result);
           return {
             status: "success",
-            message: `Asset successfully assigned to Employee ID: ${employeeId}`,
+            message: `Asset successfully assigned to Owner: ${employeeObjectKey}`,
           };
         } else {
           console.error("❌ Update failed:", response.status, await response.text());
@@ -416,26 +421,25 @@ export async function assignAsset(payload) {
       }
     };
 
-    // Check if the employee exists in emp_data.json
-    const employeeExists = await checkEmployeeExists(employeeId);
-    if (!employeeExists) {
-      console.log(`❌ Employee with ID ${employeeId} does not exist.`);
+    // Check if the employee exists and get their objectKey
+    const employeeObjectKey = await getEmployeeObjectKey(employeeId);
+    if (!employeeObjectKey) {
       return {
         status: "error",
         message: `Employee with ID ${employeeId} does not exist. Please add the employee to the database before assigning the asset.`,
       };
     }
 
-    // Fetch the current "Assigned_to" attribute value
-    const currentValue = await fetchAssignedToAttribute(objectKey);
+    // Fetch the current "Owner" attribute value
+    const currentValue = await fetchOwnerAttribute(objectKey);
 
     // Debug logging of the fetched value.
-    console.log(`Debug: Fetched "Assigned_to" attribute value: ${currentValue}`);
+    console.log(`Debug: Fetched "Owner" attribute value: ${currentValue}`);
 
     // Check if the attribute is either null (the actual null value) or the string "null"
     if (currentValue === null || currentValue === "null") {
-      console.log(`"Assigned_to" is ${currentValue}. Proceeding with update...`);
-      const result = await updateAssignedTo(objectKey, employeeId);
+      console.log(`"Owner" is ${currentValue}. Proceeding with update...`);
+      const result = await updateOwner(objectKey, employeeObjectKey);
       return result;
     } else {
       console.log(`❌ Asset is already assigned to: ${currentValue}. No update performed.`);
