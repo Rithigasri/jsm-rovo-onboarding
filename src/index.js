@@ -33,15 +33,7 @@ function logDebugInfo(message, data) {
 }
 
 // Helper function to write employee data to the JSON file
-async function writeEmployeeData(data) {
-  try {
-    await fs.writeFile(EMP_DATA_FILE, JSON.stringify(data, null, 2));
-    console.log("Employee data saved successfully to emp_data.json.");
-  } catch (error) {
-    console.error("Error writing employee data:", error);
-    throw error;
-  }
-}
+
 
 // Helper function to read employee data from the JSON file
 async function readEmployeeData() {
@@ -54,22 +46,52 @@ async function readEmployeeData() {
   }
 }
 
-// 1. Add Employee
+// Function to check if an employee exists using AQL
+const checkEmployeeExists = async (userId) => {
+  const url = `${BASE_URL}/object/aql?startAt=0&maxResults=1&includeAttributes=true`;
+  const payload = {
+    qlQuery: `objectType = "People" AND Employee_id = "${userId}"`, // Correct AQL query
+  };
+
+  try {
+    console.log(`🔍 Checking if employee with ID ${userId} exists using AQL...`);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log("AQL Response:", JSON.stringify(data, null, 2));
+
+      // Check if the total field indicates the employee exists
+      const exists = data.total === 1;
+      console.log(`✅ Employee with ID ${userId} ${exists ? "exists" : "does not exist"}.`);
+      return exists;
+    } else {
+      console.error("❌ Failed to check employee existence:", response.status, await response.text());
+      return false;
+    }
+  } catch (error) {
+    console.error("❌ Error while checking employee existence:", error);
+    return false;
+  }
+};
+
+// Updated addEmployee function
 export async function addEmployee(payload) {
   console.log("Payload received:", payload);
 
   if (payload.userId && payload.username) {
-    // Read existing employee data
-    const employeeData = await readEmployeeData();
+    // Check if the employee already exists using AQL
+    const employeeExists = await checkEmployeeExists(payload.userId);
 
-    // Check if the employee already exists based on emp_id
-    const existingEmployee = employeeData.find((emp) => emp.emp_id === payload.userId);
-
-    if (existingEmployee) {
-      console.log(`❌ Employee already exists: ${existingEmployee.name} (ID: ${existingEmployee.emp_id}).`);
+    if (employeeExists) {
+      console.log(`❌ Employee already exists: ${payload.username} (ID: ${payload.userId}).`);
       return {
         status: "error",
-        message: `Employee already exists: ${existingEmployee.name} (ID: ${existingEmployee.emp_id}).`,
+        message: `Employee already exists: ${payload.username} (ID: ${payload.userId}).`,
       };
     }
 
@@ -89,7 +111,7 @@ export async function addEmployee(payload) {
     };
 
     try {
-      logDebugInfo("Sending request to create object", data);
+      console.log("🔄 Sending request to create object...");
       const response = await fetch(`${BASE_URL}/object/create`, {
         method: "POST",
         headers: getHeaders(),
@@ -99,15 +121,6 @@ export async function addEmployee(payload) {
       if (response.ok) {
         const result = await response.json();
         console.log("✅ Employee added successfully:", result);
-
-        // Add the new employee to emp_data.json
-        employeeData.push({
-          objectKey: result.objectKey,
-          name: payload.username,
-          emp_id: payload.userId,
-        });
-        await writeEmployeeData(employeeData);
-        console.log("✅ Employee data updated in emp_data.json.");
 
         return {
           status: "success",
@@ -170,16 +183,19 @@ export async function syncToConfluence() {
   const getObjects = async (objectTypeId, objectTypeName, attributeMap) => {
     const url = `${BASE_URL}/object/aql?startAt=0&maxResults=100&includeAttributes=true`;
     const payload = { qlQuery: `objectType = "${objectTypeName}"` };
+
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(payload),
       });
+
       if (!response.ok) {
         console.error(`❌ Failed to fetch objects for ${objectTypeName}:`, response.status);
         return [];
       }
+
       const data = await response.json();
       console.log(`✅ Fetched objects for ${objectTypeName}:`, data);
       const objects = data.values || [];
@@ -188,8 +204,9 @@ export async function syncToConfluence() {
         const attributes = {};
         obj.attributes.forEach((attr) => {
           const name = attributeMap[attr.objectTypeAttributeId];
-          if (name && attr.objectAttributeValues?.[0]?.value) {
-            attributes[name] = attr.objectAttributeValues[0].value;
+          if (name) {
+            // Set the value to an empty string if the attribute value is missing or empty
+            attributes[name] = attr.objectAttributeValues?.[0]?.value || "";
           }
         });
         return { id: obj.id, name: obj.name, attributes };
@@ -313,23 +330,37 @@ export async function assignAsset(payload) {
 
     console.log(`Processing asset assignment: Object Key - ${objectKey}, Employee ID - ${employeeId}`);
 
-    // Function to check if the employee exists in emp_data.json and get their objectKey
+    // Function to fetch the employee's objectKey using AQL
     const getEmployeeObjectKey = async (employeeId) => {
-      try {
-        const data = await fs.readFile(EMP_DATA_FILE, "utf-8");
-        const employees = JSON.parse(data);
+      const url = `${BASE_URL}/object/aql?startAt=0&maxResults=1&includeAttributes=true`;
+      const payload = {
+        qlQuery: `objectType = "People" AND Employee_id = "${employeeId}"`, // Correct AQL query
+      };
 
-        // Find the employee by employeeId
-        const employee = employees.find((emp) => emp.emp_id === employeeId);
-        if (employee) {
-          console.log(`✅ Employee found: ${employee.name} (ID: ${employeeId}, ObjectKey: ${employee.objectKey})`);
-          return employee.objectKey; // Return the objectKey instead of the name
+      try {
+        console.log(`🔍 Fetching employee objectKey for ID: ${employeeId} using AQL...`);
+        const response = await fetch(url, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.total === 1) {
+            const objectKey = data.values[0]?.objectKey;
+            console.log(`✅ Employee found. ObjectKey: ${objectKey}`);
+            return objectKey;
+          } else {
+            console.log(`❌ Employee with ID ${employeeId} not found.`);
+            return null;
+          }
         } else {
-          console.log(`❌ Employee with ID ${employeeId} not found.`);
+          console.error("❌ Failed to fetch employee objectKey:", response.status, await response.text());
           return null;
         }
       } catch (error) {
-        console.error("❌ Error reading emp_data.json:", error);
+        console.error("❌ Error while fetching employee objectKey:", error);
         return null;
       }
     };
@@ -354,11 +385,15 @@ export async function assignAsset(payload) {
             (attr) => attr.objectTypeAttributeId === "1572"
           );
 
-          // Check if the attribute exists and has a value
-          if (ownerAttribute && ownerAttribute.objectAttributeValues.length > 0) {
-            const value = ownerAttribute.objectAttributeValues[0].value;
-            console.log(`Fetched "Owner" attribute value: ${value}`);
-            return value;
+          // Check if the attribute exists and has a referencedObject
+          if (
+            ownerAttribute &&
+            ownerAttribute.objectAttributeValues.length > 0 &&
+            ownerAttribute.objectAttributeValues[0].referencedObject
+          ) {
+            const label = ownerAttribute.objectAttributeValues[0].referencedObject.label;
+            console.log(`Fetched "Owner" attribute label: ${label}`);
+            return label;
           }
 
           console.log(`"Owner" attribute is empty or not set.`);
@@ -421,12 +456,12 @@ export async function assignAsset(payload) {
       }
     };
 
-    // Check if the employee exists and get their objectKey
+    // Fetch the employee's objectKey using AQL
     const employeeObjectKey = await getEmployeeObjectKey(employeeId);
     if (!employeeObjectKey) {
       return {
         status: "error",
-        message: `Employee with ID ${employeeId} does not exist. Please add the employee to the database before assigning the asset.`,
+        message: `Employee with ID ${employeeId} does not exist. Please add the employee to the system before assigning the asset.`,
       };
     }
 
@@ -457,140 +492,7 @@ export async function assignAsset(payload) {
   }
 }
 
-// Function to fetch employee data from the REST API and save it locally
-export async function updateData() {
-  console.log("Fetching employee data from the REST API...");
 
-  const url = `${BASE_URL}/object/navlist/aql`;
-  const payload = {
-    objectTypeId: OBJECT_TYPE_ID,
-    attributesToDisplay: {
-      attributesToDisplayIds: ["1551", "1552", "1561"], // Key, Name, Employee ID
-    },
-    page: 1,
-    asc: 1,
-    resultsPerPage: 100,
-    includeAttributes: true,
-    objectSchemaId: OBJECT_SCHEMA_ID,
-    qlQuery: `objectType = "People"`, // Query to filter by object type
-  };
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      console.error("Failed to fetch employee data:", response.status, await response.text());
-      return;
-    }
-
-    const data = await response.json();
-    const employeeData = data.objectEntries.map((entry) => {
-      const attributes = entry.attributes.reduce((acc, attr) => {
-        if (attr.objectTypeAttributeId === "1551") acc.objectKey = attr.objectAttributeValues[0]?.value;
-        if (attr.objectTypeAttributeId === "1552") acc.name = attr.objectAttributeValues[0]?.value;
-        if (attr.objectTypeAttributeId === "1561") acc.emp_id = attr.objectAttributeValues[0]?.value;
-        return acc;
-      }, {});
-
-      return {
-        objectKey: attributes.objectKey,
-        name: attributes.name,
-        emp_id: attributes.emp_id,
-      };
-    });
-
-    // Save the filtered employee data to a JSON file
-    await writeEmployeeData(employeeData);
-  } catch (error) {
-    console.error("Error while fetching or saving employee data:", error);
-  }
-}
-
-// Function to fetch content from the Confluence page
-async function fetchKnowledgeBaseContent() {
-  const confluencePageId = "27394050"; // ID of the Confluence page
-  const url = `${CONFLUENCE_BASE_URL}/content/${confluencePageId}?expand=body.storage`;
-
-  try {
-    console.log("Fetching content from the Confluence knowledge base...");
-    const response = await fetch(url, {
-      method: "GET",
-      headers: getHeaders(),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      const content = data.body.storage.value; // HTML content of the page
-      console.log("✅ Successfully fetched knowledge base content.");
-      return content;
-    } else {
-      console.error("❌ Failed to fetch knowledge base content:", response.status, await response.text());
-      return null;
-    }
-  } catch (error) {
-    console.error("❌ Error while fetching knowledge base content:", error);
-    return null;
-  }
-}
-
-// Function to query the knowledge base
-export async function queryKnowledgeBase(payload) {
-  // Log the payload for debugging
-  console.log("Received payload for queryKnowledgeBase:", JSON.stringify(payload, null, 2));
-
-  // Extract the query from the payload
-  const query = payload?.query;
-
-  // Validate the query parameter
-  if (typeof query !== "string" || query.trim() === "") {
-    console.error("❌ Invalid query parameter. Query must be a non-empty string.");
-    return {
-      status: "error",
-      message: "Invalid query. Please provide a valid question or search term.",
-    };
-  }
-
-  const content = await fetchKnowledgeBaseContent();
-
-  if (!content) {
-    return {
-      status: "error",
-      message: "Knowledge base content is empty or could not be fetched.",
-    };
-  }
-
-  // Parse the content and search for the query
-  console.log("Searching the knowledge base for the query...");
-  const lowerCaseQuery = query.toLowerCase();
-  const matches = [];
-
-  // Example: Extracting relevant sections from the HTML content
-  const regex = /<p>(.*?)<\/p>/g; // Adjust this regex based on the structure of your Confluence page
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    if (match[1].toLowerCase().includes(lowerCaseQuery)) {
-      matches.push(match[1]);
-    }
-  }
-
-  if (matches.length > 0) {
-    console.log("✅ Found matches in the knowledge base:", matches);
-    return {
-      status: "success",
-      results: matches,
-    };
-  } else {
-    console.log("❌ No matches found in the knowledge base.");
-    return {
-      status: "error",
-      message: "No relevant information found in the knowledge base.",
-    };
-  }
-}
 
 export async function deleteEmployee(payload) {
   console.log("Received payload for deleteEmployee:", JSON.stringify(payload, null, 2));
@@ -607,53 +509,60 @@ export async function deleteEmployee(payload) {
     };
   }
 
+  // Check if the employee exists using AQL
+  const employeeExists = await checkEmployeeExists(empId);
+
+  if (!employeeExists) {
+    console.error(`❌ Employee with ID ${empId} not found.`);
+    return {
+      status: "error",
+      message: `Employee with ID ${empId} not found.`,
+    };
+  }
+
   try {
-    // Step 1: Read the emp_data.json file
-    console.log("🔄 Reading emp_data.json...");
-    const data = await fs.readFile(EMP_DATA_FILE, "utf-8");
-    const employees = JSON.parse(data);
+    // Fetch the objectKey using AQL
+    const url = `${BASE_URL}/object/aql?startAt=0&maxResults=1&includeAttributes=true`;
+    const payload = {
+      qlQuery: `objectType = "People" AND Employee_id = "${empId}"`,
+    };
 
-    // Step 2: Find the employee with the given emp_id
-    console.log(`🔍 Searching for employee with ID: ${empId}...`);
-    const employee = employees.find((emp) => emp.emp_id === empId);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
 
-    if (!employee) {
-      console.error(`❌ Employee with ID ${empId} not found.`);
+    if (!response.ok) {
+      console.error("❌ Failed to fetch employee objectKey:", response.status, await response.text());
       return {
         status: "error",
-        message: `Employee with ID ${empId} not found.`,
+        message: "Failed to fetch employee objectKey.",
       };
     }
 
-    // Step 3: Extract the objectKey and split to get the object ID
-    const objectKey = employee.objectKey;
+    const data = await response.json();
+    const objectKey = data.values[0]?.objectKey;
     const objectId = objectKey.split("-")[1]; // Extract the numeric ID from the objectKey
     console.log(`✅ Found employee. ObjectKey: ${objectKey}, ObjectId: ${objectId}`);
 
-    // Step 4: Delete the object using the API
-    const url = `${BASE_URL}/object/${objectId}`;
-    console.log(`🔄 Sending DELETE request to URL: ${url}...`);
+    // Delete the object using the API
+    const deleteUrl = `${BASE_URL}/object/${objectId}`;
+    console.log(`🔄 Sending DELETE request to URL: ${deleteUrl}...`);
 
-    const response = await fetch(url, {
+    const deleteResponse = await fetch(deleteUrl, {
       method: "DELETE",
       headers: getHeaders(),
     });
 
-    if (response.ok) {
+    if (deleteResponse.ok) {
       console.log(`✅ Successfully deleted object with ID ${objectId}.`);
-
-      // Step 5: Remove the employee from the emp_data.json file
-      console.log("🔄 Removing employee from emp_data.json...");
-      const updatedEmployees = employees.filter((emp) => emp.emp_id !== empId);
-      await fs.writeFile(EMP_DATA_FILE, JSON.stringify(updatedEmployees, null, 2));
-      console.log("✅ Employee data updated successfully in emp_data.json.");
-
       return {
         status: "success",
         message: `Employee with ID ${empId} and objectKey ${objectKey} successfully deleted.`,
       };
     } else {
-      console.error("❌ Failed to delete object:", response.status, await response.text());
+      console.error("❌ Failed to delete object:", deleteResponse.status, await deleteResponse.text());
       return {
         status: "error",
         message: "Failed to delete the employee object.",

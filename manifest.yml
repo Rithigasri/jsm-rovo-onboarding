@@ -1,31 +1,25 @@
 modules:
   rovo:agent:
     - key: emp-hello-world-agent
-      name: emp
+      name: Employee Management
       description: An agent for testing user logging and employee adding.
       prompt: >
         You are a helpful agent. You can log usernames or add employees.
         - If a user asks to "add an employee", extract the `userId` and `username`, and call `add-employee`.
         - If a user asks to "assign an asset", extract the `objectKey` and `employeeId`, and call `assign-asset`.
         - Sync asset attributes to Confluence by calling `sync-attributes-to-confluence`. No input is required.
-        - If a user asks to "update employee data", call `update-data`.
-        - If a user asks a question about assets or employees, call `query-knowledge-base`.
         - If a user asks to "delete an employee", extract the `emp_id`, and call `delete-employee`.
         If required information is missing, ask the user to provide it.
       conversationStarters:
         - Add a new employee
         - Assign an asset to an employee
         - Sync asset attributes to Confluence
-        - Update employee data
-        - Ask a question about assets or employees
         - Delete an employee
 
       actions:
         - add-employee
         - assign-asset
         - sync-attributes-to-confluence
-        - update-data
-        - query-knowledge-base
         - delete-employee
 
   action:
@@ -35,7 +29,7 @@ modules:
       actionVerb: GET
       description: >
         Logs an employee to Forge logs in format: userId,username.
-        Validates if the employee already exists in emp_data.json before adding.
+        Validates if the employee already exists using AQL before adding.
       inputs:
         userId:
           title: User ID
@@ -70,24 +64,6 @@ modules:
       actionVerb: GET
       description: >
         Fetches assets from Insight and syncs their attributes to a Confluence page.
-    - key: update-data
-      name: Update Employee Data
-      function: updateData
-      actionVerb: GET
-      description: >
-        Fetches employee data from the REST API and saves it locally in a JSON file.
-    - key: query-knowledge-base
-      name: Query Knowledge Base
-      function: queryKnowledgeBase
-      actionVerb: GET
-      description: >
-        Queries the Confluence knowledge base for information related to assets or employees.
-      inputs:
-        query:
-          title: Query
-          type: string
-          required: true
-          description: The question or query to search in the knowledge base.
     - key: delete-employee
       name: Delete Employee
       function: deleteEmployee
@@ -108,10 +84,6 @@ modules:
       handler: index.syncToConfluence
     - key: assignAsset
       handler: index.assignAsset
-    - key: updateData
-      handler: index.updateData
-    - key: queryKnowledgeBase
-      handler: index.queryKnowledgeBase
     - key: deleteEmployee
       handler: index.deleteEmployee
 
