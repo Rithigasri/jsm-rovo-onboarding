@@ -7,18 +7,21 @@ modules:
         You are a helpful agent. You can log usernames or add employees.
         - If a user asks to "add an employee", extract the `userId` and `username`, and call `add-employee`.
         - If a user asks to "assign an asset", extract the `objectKey` and `employeeId`, and call `assign-asset`.
+        - If a user asks to "deallocate an asset", extract the `objectKey`, and call `deallocate-asset`.
         - Sync asset attributes to Confluence by calling `sync-attributes-to-confluence`. No input is required.
         - If a user asks to "delete an employee", extract the `emp_id`, and call `delete-employee`.
         If required information is missing, ask the user to provide it.
       conversationStarters:
         - Add a new employee
         - Assign an asset to an employee
+        - Deallocate an asset
         - Sync asset attributes to Confluence
         - Delete an employee
 
       actions:
         - add-employee
         - assign-asset
+        - deallocate-asset
         - sync-attributes-to-confluence
         - delete-employee
 
@@ -76,6 +79,18 @@ modules:
           type: string
           required: true
           description: The ID of the employee to delete.
+    - key: deallocate-asset
+      name: Deallocate Asset
+      function: deallocateAsset
+      actionVerb: GET
+      description: >
+        Removes the owner of an asset by clearing the "Owner" attribute value.
+      inputs:
+        objectKey:
+          title: Object Key
+          type: string
+          required: true
+          description: Key of the asset to be deallocated.
 
   function:
     - key: addEmployee
@@ -86,6 +101,8 @@ modules:
       handler: index.assignAsset
     - key: deleteEmployee
       handler: index.deleteEmployee
+    - key: deallocateAsset
+      handler: index.deallocateAsset
 
 permissions:
   scopes:

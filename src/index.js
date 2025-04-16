@@ -513,7 +513,127 @@ export async function assignAsset(payload) {
   }
 }
 
+export async function deallocateAsset(payload) {
+  console.log("Payload received for deallocateAsset:", payload);
 
+  if (payload.objectKey) {
+    const objectKey = payload.objectKey;
+
+    console.log(`Processing asset deallocation: Object Key - ${objectKey}`);
+
+    // Function to fetch the current value of the "Owner" attribute
+    const fetchOwnerAttribute = async (objectKey) => {
+      const objectId = objectKey.split("-")[1];
+      const url = `${BASE_URL}/object/${objectId}/attributes`;
+
+      try {
+        console.log(`Fetching attributes for object ${objectKey} (ID: ${objectId})...`);
+        const response = await fetch(url, {
+          method: "GET",
+          headers: getHeaders(),
+        });
+
+        if (response.ok) {
+          const attributes = await response.json();
+
+          // Locate the "Owner" attribute by its attribute id (1572)
+          const ownerAttribute = attributes.find(
+            (attr) => attr.objectTypeAttributeId === "1572"
+          );
+
+          // Check if the attribute exists and has a referencedObject
+          if (
+            ownerAttribute &&
+            ownerAttribute.objectAttributeValues.length > 0 &&
+            ownerAttribute.objectAttributeValues[0].referencedObject
+          ) {
+            const label = ownerAttribute.objectAttributeValues[0].referencedObject.label;
+            console.log(`Fetched "Owner" attribute label: ${label}`);
+            return label;
+          }
+
+          console.log(`"Owner" attribute is empty or not set.`);
+          return null; // Return null if the attribute is empty or not set
+        } else {
+          console.error("❌ Failed to fetch attributes:", response.status, await response.text());
+          return null;
+        }
+      } catch (error) {
+        console.error("❌ Error while fetching attributes:", error);
+        return null;
+      }
+    };
+
+    // Function to update the "Owner" attribute to remove its value
+    const removeOwner = async (objectKey) => {
+      const objectId = objectKey.split("-")[1];
+      const url = `${BASE_URL}/object/${objectId}`;
+      const payloadData = {
+        attributes: [
+          {
+            objectTypeAttributeId: "1572", // Attribute ID for "Owner"
+            objectAttributeValues: [], // Set to an empty array to remove the value
+          },
+        ],
+      };
+
+      try {
+        console.log(`Removing owner for object ${objectKey}...`);
+        const response = await fetch(url, {
+          method: "PUT",
+          headers: getHeaders(),
+          body: JSON.stringify(payloadData),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log("✅ Owner removed successfully:", result);
+          return {
+            status: "success",
+            message: `Owner removed successfully for asset: ${objectKey}`,
+          };
+        } else {
+          console.error("❌ Failed to remove owner:", response.status, await response.text());
+          return {
+            status: "error",
+            message: "Failed to remove owner.",
+          };
+        }
+      } catch (error) {
+        console.error("❌ Error during owner removal:", error);
+        return {
+          status: "error",
+          message: "An error occurred while removing the owner.",
+        };
+      }
+    };
+
+    // Fetch the current "Owner" attribute value
+    const currentValue = await fetchOwnerAttribute(objectKey);
+
+    // Debug logging of the fetched value.
+    console.log(`Debug: Fetched "Owner" attribute value: ${currentValue}`);
+
+    // Check if the attribute has a value
+    if (currentValue) {
+      console.log(`"Owner" is currently set to: ${currentValue}. Proceeding with removal...`);
+      const result = await removeOwner(objectKey);
+      return result;
+    } else {
+      console.log(`❌ Asset already has no owner. No update performed.`);
+      return {
+        status: "error",
+        message: `Asset already has no owner.`,
+      };
+    }
+  } else {
+    console.error("❌ Missing required fields in payload. Ensure objectKey is provided.");
+    return {
+      status: "error",
+      message: "Missing required fields. Ensure objectKey is provided.",
+    };
+  }
+}
 
 export async function deleteEmployee(payload) {
   console.log("Received payload for deleteEmployee:", JSON.stringify(payload, null, 2));
