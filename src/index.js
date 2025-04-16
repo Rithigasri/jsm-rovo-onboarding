@@ -152,7 +152,7 @@ export async function addEmployee(payload) {
 // 2. Confluence Sync
 
 export async function syncToConfluence() {
-  const objectSchemaId = 14;
+  const objectSchemaId = 14; // Restrict to Object Schema ID 14
   const confluencePageId = "27394050"; // ID of the existing Confluence page to update
   console.log("🔄 Starting sync to Confluence for object schema:", objectSchemaId);
 
@@ -164,27 +164,60 @@ export async function syncToConfluence() {
       return [];
     }
     const types = await response.json();
-    console.log("✅ Fetched object types:", types);
+    console.log("✅ Fetched object types for schema ID 14:", types);
     return types.map((type) => ({ id: type.id, name: type.name }));
   };
 
-  const getAttributes = async (objectTypeId) => {
-    const url = `${BASE_URL}/objecttype/${objectTypeId}/attributes`;
-    const response = await fetch(url, { headers: getHeaders() });
-    if (!response.ok) {
-      console.error(`❌ Failed to fetch attributes for type ${objectTypeId}:`, response.status);
-      return [];
-    }
-    const attrs = await response.json();
-    console.log(`✅ Fetched attributes for object type ${objectTypeId}:`, attrs);
-    return attrs.map((attr) => ({ id: attr.id, name: attr.name }));
-  };
-
-  const getObjects = async (objectTypeId, objectTypeName, attributeMap) => {
-    const url = `${BASE_URL}/object/aql?startAt=0&maxResults=100&includeAttributes=true`;
-    const payload = { qlQuery: `objectType = "${objectTypeName}"` };
+  const getObjectDetails = async (objectId) => {
+    const url = `${BASE_URL}/object/${objectId}?includeExtendedInfo=false`;
 
     try {
+      console.log(`🔍 Fetching details for object ID: ${objectId}`);
+      const response = await fetch(url, { headers: getHeaders() });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Fetched details for object ID ${objectId}:`, data);
+
+        // Map attributes to a key-value pair
+        const attributes = {};
+        data.attributes.forEach((attr) => {
+          const name = attr.objectTypeAttribute.name;
+          const value = attr.objectAttributeValues?.[0];
+
+          if (value) {
+            if (value.referencedObject) {
+              // If the attribute is a referenced object, use its displayValue or name
+              attributes[name] = value.referencedObject.displayValue || value.referencedObject.name;
+            } else {
+              // Otherwise, use the raw value
+              attributes[name] = value.displayValue || value.value;
+            }
+          } else {
+            // Explicitly set the value to an empty string if no value is present
+            attributes[name] = "";
+          }
+        });
+
+        return { id: data.id, name: data.name, attributes };
+      } else {
+        console.error(`❌ Failed to fetch details for object ID ${objectId}:`, response.status);
+        return null;
+      }
+    } catch (error) {
+      console.error(`❌ Error while fetching details for object ID ${objectId}:`, error);
+      return null;
+    }
+  };
+
+  const getObjects = async (objectTypeId, objectTypeName) => {
+    const url = `${BASE_URL}/object/aql?startAt=0&maxResults=100&includeAttributes=true`;
+    const payload = {
+      qlQuery: `objectSchemaId = 14 AND objectType = "${objectTypeName}"`, // Restrict to Object Schema ID 14
+    };
+
+    try {
+      console.log(`🔍 Fetching objects for object type: ${objectTypeName} in schema ID 14...`);
       const response = await fetch(url, {
         method: "POST",
         headers: getHeaders(),
@@ -200,17 +233,16 @@ export async function syncToConfluence() {
       console.log(`✅ Fetched objects for ${objectTypeName}:`, data);
       const objects = data.values || [];
 
-      return objects.map((obj) => {
-        const attributes = {};
-        obj.attributes.forEach((attr) => {
-          const name = attributeMap[attr.objectTypeAttributeId];
-          if (name) {
-            // Set the value to an empty string if the attribute value is missing or empty
-            attributes[name] = attr.objectAttributeValues?.[0]?.value || "";
-          }
-        });
-        return { id: obj.id, name: obj.name, attributes };
-      });
+      // Fetch detailed attributes for each object using for...of to properly await each call
+      const detailedObjects = [];
+      for (const obj of objects) {
+        const detailedObject = await getObjectDetails(obj.id);
+        if (detailedObject) {
+          detailedObjects.push(detailedObject);
+        }
+      }
+
+      return detailedObjects;
     } catch (error) {
       console.error("❌ Error while fetching objects:", error);
       return [];
@@ -221,17 +253,17 @@ export async function syncToConfluence() {
     const url = `${CONFLUENCE_BASE_URL}/content/${pageId}`;
     const payload = {
       id: pageId,
-      type: "page", // Specify the content type as "page"
-      title: title, // Title of the page
+      type: "page",
+      title: title,
       body: {
         storage: {
           value: `<p>${content}</p>`,
-          representation: "storage"
-        }
+          representation: "storage",
+        },
       },
       version: {
-        number: versionNumber + 1, // Increment the version number
-        message: "Updated with the latest asset data", // Update message
+        number: versionNumber + 1,
+        message: "Updated with the latest asset data",
       },
     };
 
@@ -275,21 +307,14 @@ export async function syncToConfluence() {
   try {
     const objectTypes = await getAllObjectTypes();
     if (objectTypes.length === 0) {
-      console.error("❌ No object types found. Exiting sync process.");
+      console.error("❌ No object types found for schema ID 14. Exiting sync process.");
       return;
     }
 
     const allObjects = [];
     for (const objectType of objectTypes) {
       console.log("🔍 Processing object type:", objectType.name);
-      const attributes = await getAttributes(objectType.id);
-      if (attributes.length === 0) {
-        console.warn(`⚠️ No attributes found for object type ${objectType.name}. Skipping.`);
-        continue;
-      }
-
-      const attributeMap = Object.fromEntries(attributes.map((attr) => [attr.id, attr.name]));
-      const objects = await getObjects(objectType.id, objectType.name, attributeMap);
+      const objects = await getObjects(objectType.id, objectType.name);
       if (objects.length === 0) {
         console.warn(`⚠️ No objects found for object type ${objectType.name}. Skipping.`);
         continue;
@@ -300,16 +325,12 @@ export async function syncToConfluence() {
     }
 
     if (allObjects.length === 0) {
-      console.error("❌ No objects processed. Exiting sync process.");
+      console.error("❌ No objects processed for schema ID 14. Exiting sync process.");
       return;
     }
 
     const jsonContent = JSON.stringify(allObjects, null, 2);
     console.log("📄 Generated JSON content for Confluence page:", jsonContent);
-
-    // Write JSON content to a file for debugging
-    await fs.writeFile("response.json", jsonContent);
-    console.log("📁 JSON written to file: response.json");
 
     const title = "Asset Knowledge Base";
     const versionNumber = await getConfluencePageVersion(confluencePageId);
